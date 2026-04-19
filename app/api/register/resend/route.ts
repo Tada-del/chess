@@ -1,4 +1,4 @@
-import { addHours } from "date-fns";
+import { addHours, isBefore } from "date-fns";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -33,12 +33,23 @@ export async function POST(request: Request) {
     const email = parsed.data.email.toLowerCase();
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return NextResponse.json({ error: "No account found for that email." }, { status: 404 });
+    if (user?.emailVerified) {
+      return NextResponse.json({ error: "This account is already verified." }, { status: 409 });
     }
 
-    if (user.emailVerified) {
-      return NextResponse.json({ error: "This account is already verified." }, { status: 409 });
+    const pending = await prisma.pendingRegistration.findUnique({ where: { email } });
+    if (!pending) {
+      return NextResponse.json(
+        { error: "No pending registration found for that email. Register again first." },
+        { status: 404 },
+      );
+    }
+
+    if (isBefore(pending.expiresAt, new Date())) {
+      return NextResponse.json(
+        { error: "Pending registration has expired. Please register again." },
+        { status: 410 },
+      );
     }
 
     await prisma.verificationToken.deleteMany({ where: { identifier: email } });
@@ -46,20 +57,28 @@ export async function POST(request: Request) {
     const token = randomUUID();
     const expires = addHours(new Date(), 24);
 
-    await prisma.verificationToken.create({
-      data: {
-        identifier: email,
-        token,
-        expires,
-      },
-    });
+    await prisma.$transaction([
+      prisma.pendingRegistration.update({
+        where: { email },
+        data: {
+          expiresAt: expires,
+        },
+      }),
+      prisma.verificationToken.create({
+        data: {
+          identifier: email,
+          token,
+          expires,
+        },
+      }),
+    ]);
 
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
     const verificationUrl = `${baseUrl}/api/verify-email?token=${token}&email=${encodeURIComponent(email)}`;
 
     await sendVerificationEmail({
       to: email,
-      name: user.name,
+      name: pending.name,
       verificationUrl,
     });
 

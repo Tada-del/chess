@@ -11,8 +11,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/verify?status=error", request.url));
   }
 
+  const normalizedEmail = email.toLowerCase();
   const record = await prisma.verificationToken.findUnique({ where: { token } });
-  if (!record || record.identifier !== email.toLowerCase()) {
+  if (!record || record.identifier !== normalizedEmail) {
     return NextResponse.redirect(new URL("/verify?status=invalid", request.url));
   }
 
@@ -20,12 +21,24 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/verify?status=expired", request.url));
   }
 
-  await prisma.user.update({
-    where: { email: email.toLowerCase() },
-    data: { emailVerified: new Date() },
-  });
+  const pending = await prisma.pendingRegistration.findUnique({ where: { email: normalizedEmail } });
+  if (!pending || isBefore(pending.expiresAt, new Date())) {
+    await prisma.verificationToken.delete({ where: { token } }).catch(() => undefined);
+    return NextResponse.redirect(new URL("/verify?status=expired", request.url));
+  }
 
-  await prisma.verificationToken.delete({ where: { token } });
+  await prisma.$transaction([
+    prisma.user.create({
+      data: {
+        email: normalizedEmail,
+        name: pending.name,
+        passwordHash: pending.passwordHash,
+        emailVerified: new Date(),
+      },
+    }),
+    prisma.pendingRegistration.delete({ where: { email: normalizedEmail } }),
+    prisma.verificationToken.delete({ where: { token } }),
+  ]);
 
   return NextResponse.redirect(new URL("/verify?status=success", request.url));
 }

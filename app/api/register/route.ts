@@ -43,24 +43,33 @@ export async function POST(request: Request) {
 
     const passwordHash = await hash(password, 12);
 
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email: normalizedEmail,
-        passwordHash,
-      },
-    });
-
     const token = randomUUID();
     const expires = addHours(new Date(), 24);
 
-    await prisma.verificationToken.create({
-      data: {
-        identifier: normalizedEmail,
-        token,
-        expires,
-      },
-    });
+    await prisma.$transaction([
+      prisma.verificationToken.deleteMany({ where: { identifier: normalizedEmail } }),
+      prisma.pendingRegistration.upsert({
+        where: { email: normalizedEmail },
+        update: {
+          name,
+          passwordHash,
+          expiresAt: expires,
+        },
+        create: {
+          email: normalizedEmail,
+          name,
+          passwordHash,
+          expiresAt: expires,
+        },
+      }),
+      prisma.verificationToken.create({
+        data: {
+          identifier: normalizedEmail,
+          token,
+          expires,
+        },
+      }),
+    ]);
 
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
     const verificationUrl = `${baseUrl}/api/verify-email?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
@@ -74,8 +83,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message:
-        "Account created. Please check your Gmail inbox for a verification link before signing in.",
-      userId: user.id,
+        "Verification email sent. Your account will be created only after you click the verification link.",
     });
   } catch (error) {
     console.error(error);
@@ -102,8 +110,10 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Missing token or email." }, { status: 400 });
     }
 
+    const normalizedEmail = String(email).toLowerCase();
     const record = await prisma.verificationToken.findUnique({ where: { token } });
-    if (!record || record.identifier !== email.toLowerCase()) {
+
+    if (!record || record.identifier !== normalizedEmail) {
       return NextResponse.json({ error: "Verification link is invalid." }, { status: 400 });
     }
 
@@ -111,14 +121,23 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Verification link has expired." }, { status: 400 });
     }
 
-    await prisma.user.update({
-      where: { email: email.toLowerCase() },
-      data: {
-        emailVerified: new Date(),
-      },
-    });
+    const pending = await prisma.pendingRegistration.findUnique({ where: { email: normalizedEmail } });
+    if (!pending) {
+      return NextResponse.json({ error: "No pending registration found for this email." }, { status: 404 });
+    }
 
-    await prisma.verificationToken.delete({ where: { token } });
+    await prisma.$transaction([
+      prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          name: pending.name,
+          passwordHash: pending.passwordHash,
+          emailVerified: new Date(),
+        },
+      }),
+      prisma.pendingRegistration.delete({ where: { email: normalizedEmail } }),
+      prisma.verificationToken.delete({ where: { token } }),
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

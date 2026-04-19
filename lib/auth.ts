@@ -96,13 +96,29 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        await prisma.user.update({
-          where: { email: user.email ?? undefined },
-          data: {
-            emailVerified: new Date(),
-          },
-        });
+      if (account?.provider === "google" && user.email) {
+        const normalizedEmail = user.email.toLowerCase();
+        const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+        if (!existing) {
+          await prisma.user.create({
+            data: {
+              email: normalizedEmail,
+              name: user.name,
+              image: user.image,
+              emailVerified: new Date(),
+            },
+          });
+        } else if (!existing.emailVerified) {
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: {
+              emailVerified: new Date(),
+              name: user.name ?? existing.name,
+              image: user.image ?? existing.image,
+            },
+          });
+        }
       }
       return true;
     },
