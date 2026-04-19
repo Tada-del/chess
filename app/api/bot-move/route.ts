@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateBotMove } from "@/lib/ai";
 import { AI_PERSONALITIES } from "@/lib/constants";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const schema = z.object({
   fen: z.string().min(10),
@@ -11,6 +12,17 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const limit = enforceRateLimit({
+      key: `bot-move:${ip}`,
+      limit: 120,
+      windowMs: 60_000,
+    });
+
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many bot requests. Slow down a bit." }, { status: 429 });
+    }
+
     const body = await request.json();
     const parsed = schema.safeParse(body);
 

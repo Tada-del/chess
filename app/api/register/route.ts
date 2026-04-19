@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { sendVerificationEmail } from "@/lib/email";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const registerSchema = z.object({
   name: z.string().min(2).max(60),
@@ -14,6 +15,17 @@ const registerSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const limit = enforceRateLimit({
+      key: `register:${ip}`,
+      limit: 8,
+      windowMs: 60_000,
+    });
+
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many registration attempts. Please wait a minute." }, { status: 429 });
+    }
+
     const body = await request.json();
     const parsed = registerSchema.safeParse(body);
 
@@ -51,7 +63,7 @@ export async function POST(request: Request) {
     });
 
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-    const verificationUrl = `${baseUrl}/verify?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
+    const verificationUrl = `${baseUrl}/api/verify-email?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
 
     await sendVerificationEmail({
       to: normalizedEmail,
@@ -73,6 +85,17 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const limit = enforceRateLimit({
+      key: `verify:${ip}`,
+      limit: 20,
+      windowMs: 60_000,
+    });
+
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many verification attempts. Please wait a minute." }, { status: 429 });
+    }
+
     const { token, email } = await request.json();
 
     if (!token || !email) {

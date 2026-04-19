@@ -17,9 +17,9 @@ RoyalSquare is a full-stack chess website with:
 
 - Next.js App Router + custom Node server
 - Socket.IO for live matches
-- Prisma + SQLite (swap to Postgres for production)
+- Prisma + PostgreSQL
 - NextAuth for auth
-- Stockfish.js engine integration
+- Native Stockfish engine (UCI binary)
 
 ## Quick Start
 
@@ -34,9 +34,10 @@ npm install
 Create `.env.local`:
 
 ```bash
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/royalsquare?schema=public"
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="replace-with-long-random-secret"
+STOCKFISH_BIN="/usr/games/stockfish"
 
 # Google OAuth (optional but recommended)
 GOOGLE_CLIENT_ID=""
@@ -50,13 +51,19 @@ SMTP_PASS="your-app-password"
 SMTP_FROM="RoyalSquare <your-gmail@gmail.com>"
 ```
 
-3. Run DB migration
+3. Ensure dependencies are installed
 
 ```bash
-npx prisma migrate dev --name init
+sudo apt-get install -y postgresql stockfish
 ```
 
-4. Run app
+4. Run DB migration
+
+```bash
+npx prisma migrate deploy
+```
+
+5. Run app
 
 ```bash
 npm run dev
@@ -72,16 +79,15 @@ Use Render/Railway/Fly.io with Node server support.
 
 - Build command: `npm install && npm run build && npx prisma migrate deploy`
 - Start command: `npm run start`
-- Environment: set values from `.env.local` (use hosted Postgres instead of SQLite)
+- Environment: set values from `.env.local` (with managed Postgres)
 - Expose port from `$PORT`
 
-### Postgres in production
+### One-click configs included
 
-Update `DATABASE_URL` to managed Postgres URL and run:
-
-```bash
-npx prisma migrate deploy
-```
+- `render.yaml`
+- `railway.json`
+- `Dockerfile`
+- `docker-compose.yml`
 
 ## Admin Access
 
