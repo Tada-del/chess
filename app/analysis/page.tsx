@@ -40,7 +40,7 @@ export default async function AnalysisPage() {
         Review your games with move classifications inspired by chess.com game review (best/excellent/good/inaccuracy/mistake/blunder/brilliant/great).
       </p>
       <div className="space-y-3">
-        {games.map((game) => (
+        {games.map((game: (typeof games)[number]) => (
           <article key={game.id} className="rounded-xl border border-slate-700 bg-[#272522] p-4">
             <h3 className="font-semibold text-white">
               {game.whiteName} vs {game.blackName}

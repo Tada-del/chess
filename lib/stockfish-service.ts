@@ -18,6 +18,10 @@ let engine: ChildProcessWithoutNullStreams | null = null;
 let reader: Interface | null = null;
 let queue = Promise.resolve();
 let currentJob: PendingJob | null = null;
+let phase: "boot" | "run" = "boot";
+let readyPromise: Promise<void> | null = null;
+let resolveReady: (() => void) | null = null;
+let rejectReady: ((reason?: unknown) => void) | null = null;
 
 function normalizeElo(elo: number): number {
   if (Number.isNaN(elo)) return 1200;
@@ -44,6 +48,11 @@ function parseEval(line: string): { cp?: number; mate?: number } {
 }
 
 function teardownEngine() {
+  phase = "boot";
+  readyPromise = null;
+  resolveReady = null;
+  rejectReady = null;
+
   if (reader) {
     reader.close();
     reader = null;
@@ -64,13 +73,41 @@ function ensureEngine() {
     return;
   }
 
+  readyPromise = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+
   engine = spawn(stockfishPath(), [], {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
+  if (engine.stderr) {
+    engine.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString().trim();
+      if (text) {
+        console.error("[stockfish stderr]", text);
+      }
+    });
+  }
+
   reader = createInterface({ input: engine.stdout });
 
   reader.on("line", (line) => {
+    if (phase === "boot") {
+      if (line === "uciok") {
+        engine?.stdin.write("isready\n");
+        return;
+      }
+      if (line === "readyok") {
+        phase = "run";
+        resolveReady?.();
+        resolveReady = null;
+        rejectReady = null;
+      }
+      return;
+    }
+
     if (!currentJob) {
       return;
     }
@@ -109,6 +146,8 @@ function ensureEngine() {
   });
 
   engine.on("error", (error) => {
+    rejectReady?.(error);
+    rejectReady = null;
     if (currentJob) {
       currentJob.reject(error);
       clearTimeout(currentJob.timer);
@@ -118,8 +157,11 @@ function ensureEngine() {
   });
 
   engine.on("exit", () => {
+    const err = new Error("Stockfish process exited unexpectedly.");
+    rejectReady?.(err);
+    rejectReady = null;
     if (currentJob) {
-      currentJob.reject(new Error("Stockfish process exited unexpectedly."));
+      currentJob.reject(err);
       clearTimeout(currentJob.timer);
       currentJob = null;
     }
@@ -127,7 +169,6 @@ function ensureEngine() {
   });
 
   engine.stdin.write("uci\n");
-  engine.stdin.write("isready\n");
 }
 
 async function withQueue<T>(job: () => Promise<T>): Promise<T> {
@@ -164,6 +205,20 @@ export async function getEngineBestMove({
       throw new Error("Stockfish engine not available.");
     }
 
+    if (readyPromise) {
+      await Promise.race([
+        readyPromise,
+        new Promise<void>((_, rej) =>
+          setTimeout(() => rej(new Error("Stockfish UCI init timeout. Is STOCKFISH_BIN set correctly?")), 15_000),
+        ),
+      ]);
+    }
+
+    if (phase !== "run" || !engine) {
+      throw new Error("Stockfish engine not ready.");
+    }
+
+    const proc = engine;
     const normalizedElo = normalizeElo(elo);
 
     return new Promise((resolve, reject) => {
@@ -180,14 +235,14 @@ export async function getEngineBestMove({
         latestEval: { cp: 0 },
       };
 
-      engine?.stdin.write("ucinewgame\n");
-      engine?.stdin.write("setoption name UCI_LimitStrength value true\n");
-      engine?.stdin.write(`setoption name UCI_Elo value ${normalizedElo}\n`);
-      engine?.stdin.write(`position fen ${fen}\n`);
+      proc.stdin.write("ucinewgame\n");
+      proc.stdin.write("setoption name UCI_LimitStrength value true\n");
+      proc.stdin.write(`setoption name UCI_Elo value ${normalizedElo}\n`);
+      proc.stdin.write(`position fen ${fen}\n`);
       if (depth) {
-        engine?.stdin.write(`go depth ${depth}\n`);
+        proc.stdin.write(`go depth ${depth}\n`);
       } else {
-        engine?.stdin.write(`go movetime ${movetime}\n`);
+        proc.stdin.write(`go movetime ${movetime}\n`);
       }
     });
   });

@@ -65,7 +65,7 @@ export default async function HomePage() {
           <h2 className="text-xl font-bold text-white">Recent games</h2>
           {recentGames.length ? (
             <ul className="mt-4 grid gap-2 text-sm text-slate-200">
-              {recentGames.map((game) => (
+              {recentGames.map((game: (typeof recentGames)[number]) => (
                 <li key={game.id} className="rounded-lg border border-slate-700 bg-slate-800/40 p-3">
                   {game.whiteName} vs {game.blackName} - {game.result.replaceAll("_", " ")} - {game.openingName ?? "Opening unknown"}
                 </li>

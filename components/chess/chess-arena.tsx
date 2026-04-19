@@ -1,7 +1,8 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
-import { Chess } from "chess.js";
+import { Chess, type Square } from "chess.js";
 import { motion } from "framer-motion";
 import { Chessboard } from "react-chessboard";
 import { Save, Sparkles, Undo2 } from "lucide-react";
@@ -25,11 +26,30 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
   const [personality, setPersonality] = useState<(typeof AI_PERSONALITIES)[number]["key"]>("stockfish");
   const [stockfishElo, setStockfishElo] = useState(1400);
   const [premove, setPremove] = useState<{ source: string; target: string } | null>(null);
+  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [review, setReview] = useState<ReviewResponse | null>(null);
   const [statusMessage, setStatusMessage] = useState("Game started. You play White.");
 
   const boardPosition = game.fen();
   const history = useMemo(() => game.history({ verbose: true }), [game]);
+
+  const optionSquareStyles = useMemo(() => {
+    if (!selectedSquare || game.turn() !== "w") {
+      return {} as Record<string, CSSProperties>;
+    }
+    const moves = game.moves({ square: selectedSquare as Square, verbose: true });
+    const styles: Record<string, CSSProperties> = {
+      [selectedSquare]: { background: "rgba(234, 179, 8, 0.42)", boxShadow: "inset 0 0 0 2px rgba(250, 204, 21, 0.95)" },
+    };
+    const destStyle: CSSProperties = {
+      background: "rgba(250, 204, 21, 0.65)",
+      boxShadow: "inset 0 0 0 2px rgba(202, 138, 4, 0.9)",
+    };
+    for (const m of moves) {
+      styles[m.to] = destStyle;
+    }
+    return styles;
+  }, [game, selectedSquare]);
 
   const updateOpening = async (nextGame: Chess) => {
     try {
@@ -56,6 +76,29 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
     const move = next.move({ from: source, to: target, promotion: "q" });
     if (!move) return null;
     return next;
+  };
+
+  const makePlayerMove = (sourceSquare: string, targetSquare: string) => {
+    const next = applyMove(sourceSquare, targetSquare, game.fen());
+    if (!next) {
+      return false;
+    }
+
+    setGame(next);
+    setSelectedSquare(null);
+
+    if (next.isGameOver()) {
+      setStatusMessage("Game over.");
+      void updateOpening(next);
+      return true;
+    }
+
+    void (async () => {
+      await updateOpening(next);
+      await triggerBotMove(next);
+    })();
+
+    return true;
   };
 
   const triggerBotMove = async (currentGame: Chess) => {
@@ -89,6 +132,7 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
       }
 
       setGame(botGame);
+      setSelectedSquare(null);
       await updateOpening(botGame);
 
       if (premove && botGame.turn() === "w") {
@@ -96,6 +140,7 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
         setPremove(null);
         if (premoveGame) {
           setGame(premoveGame);
+          setSelectedSquare(null);
           await updateOpening(premoveGame);
           await triggerBotMove(premoveGame);
           return;
@@ -111,7 +156,7 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
     }
   };
 
-  const onDrop = async ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => {
+  const onDrop = ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => {
     if (!targetSquare) {
       return false;
     }
@@ -122,21 +167,27 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
       return false;
     }
 
-    const next = applyMove(sourceSquare, targetSquare, game.fen());
-    if (!next) {
-      return false;
+    return makePlayerMove(sourceSquare, targetSquare);
+  };
+
+  const handleSquareClick = ({ piece, square }: { piece: { pieceType: string } | null; square: string }) => {
+    if (game.turn() !== "w" || game.isGameOver()) {
+      return;
     }
 
-    setGame(next);
-    await updateOpening(next);
-
-    if (next.isGameOver()) {
-      setStatusMessage("Game over.");
-      return true;
+    if (selectedSquare && selectedSquare !== square) {
+      if (makePlayerMove(selectedSquare, square)) {
+        return;
+      }
     }
 
-    await triggerBotMove(next);
-    return true;
+    if (piece?.pieceType.startsWith("w")) {
+      const sq = square as Square;
+      setSelectedSquare((prev) => (prev === sq ? null : sq));
+      return;
+    }
+
+    setSelectedSquare(null);
   };
 
   const undo = async () => {
@@ -144,6 +195,7 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
     if (!next.undo()) return;
     next.undo();
     setGame(next);
+    setSelectedSquare(null);
     setStatusMessage("Move undone.");
     await updateOpening(next);
   };
@@ -154,6 +206,7 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
     setOpening({});
     setReview(null);
     setPremove(null);
+    setSelectedSquare(null);
     setStatusMessage("Game started. You play White.");
   };
 
@@ -221,10 +274,11 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
             options={{
               id: "royal-square-board",
               position: boardPosition,
-              onPieceDrop: ({ sourceSquare, targetSquare }) => {
-                void onDrop({ sourceSquare, targetSquare });
-                return true;
+              squareStyles: optionSquareStyles,
+              onSquareClick: ({ piece, square }) => {
+                void handleSquareClick({ piece, square });
               },
+              onPieceDrop: ({ sourceSquare, targetSquare }) => onDrop({ sourceSquare, targetSquare }),
               boardStyle: { borderRadius: "12px", boxShadow: "0 18px 40px rgba(0,0,0,.4)" },
               darkSquareStyle: { backgroundColor: "#769656" },
               lightSquareStyle: { backgroundColor: "#eeeed2" },
@@ -253,7 +307,10 @@ export function ChessArena({ userName, userId }: { userName: string; userId?: st
             {AI_PERSONALITIES.map((entry) => (
               <button
                 key={entry.key}
-                onClick={() => setPersonality(entry.key)}
+                onClick={() => {
+                  setPersonality(entry.key);
+                  restart();
+                }}
                 className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
                   personality === entry.key
                     ? "border-[#81b64c] bg-[#81b64c]/15 text-[#dff8be]"

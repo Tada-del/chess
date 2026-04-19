@@ -46,7 +46,7 @@ export async function GET() {
   ]);
 
   const friendMap = new Map<string, { id: string; name: string | null; email: string; image: string | null }>();
-  friendsA.forEach((entry) => {
+  friendsA.forEach((entry: (typeof friendsA)[number]) => {
     friendMap.set(entry.friend.id, {
       id: entry.friend.id,
       name: entry.friend.name,
@@ -54,7 +54,7 @@ export async function GET() {
       image: entry.friend.image,
     });
   });
-  friendsB.forEach((entry) => {
+  friendsB.forEach((entry: (typeof friendsB)[number]) => {
     friendMap.set(entry.user.id, {
       id: entry.user.id,
       name: entry.user.name,
