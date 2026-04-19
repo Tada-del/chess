@@ -30,8 +30,8 @@ export function RegisterForm() {
 
     if (!response.ok) {
       setError(payload.error ?? "Could not create account.");
-      if (payload.verificationUrl) {
-        setManualVerifyUrl(payload.verificationUrl);
+      if (payload.manualVerifyUrl) {
+        setManualVerifyUrl(payload.manualVerifyUrl);
       }
       return;
     }
