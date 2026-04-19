@@ -43,7 +43,7 @@ STOCKFISH_BIN="/usr/games/stockfish"
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
 
-# SMTP for verification links (recommended)
+# SMTP for verification links (required for email/password signup)
 SMTP_HOST="smtp.gmail.com"
 SMTP_PORT="587"
 SMTP_USER="your-gmail@gmail.com"
@@ -104,3 +104,4 @@ Set user `role` to `ADMIN`.
 - Review labels are chess.com-style inspired categories based on engine centipawn loss and tactical heuristics.
 - "Claude/Gemini/Copilot/ChatGPT/DeepSeek" are style personalities powered by Stockfish strength/profile tuning.
 - For high traffic deployment, use Redis for room state + Postgres for persistent storage.
+- Gmail verification emails require valid SMTP credentials; if SMTP is missing or invalid, signup returns an error instead of pretending success.

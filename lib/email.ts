@@ -1,5 +1,12 @@
 import nodemailer from "nodemailer";
 
+export class EmailDeliveryConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EmailDeliveryConfigurationError";
+  }
+}
+
 function getTransport() {
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
@@ -7,7 +14,15 @@ function getTransport() {
   const port = Number(process.env.SMTP_PORT ?? 587);
 
   if (!host || !user || !pass) {
-    return null;
+    const missing = [
+      !host ? "SMTP_HOST" : null,
+      !user ? "SMTP_USER" : null,
+      !pass ? "SMTP_PASS" : null,
+    ].filter(Boolean);
+
+    throw new EmailDeliveryConfigurationError(
+      `Email delivery is not configured. Missing: ${missing.join(", ")}.`,
+    );
   }
 
   return nodemailer.createTransport({
@@ -31,12 +46,6 @@ export async function sendVerificationEmail({
   verificationUrl: string;
 }) {
   const transport = getTransport();
-
-  if (!transport) {
-    console.warn("SMTP credentials missing: verification email was not sent.");
-    console.info(`Verification URL for ${to}: ${verificationUrl}`);
-    return;
-  }
 
   await transport.sendMail({
     from: process.env.SMTP_FROM ?? process.env.SMTP_USER,

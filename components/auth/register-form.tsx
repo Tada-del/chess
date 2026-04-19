@@ -9,6 +9,7 @@ export function RegisterForm() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,8 +33,34 @@ export function RegisterForm() {
 
     setMessage(payload.message ?? "Account created. Check your email for verification link.");
     setName("");
-    setEmail("");
     setPassword("");
+  };
+
+  const resendVerification = async () => {
+    if (!email) {
+      setError("Enter your email first, then click resend.");
+      return;
+    }
+
+    setResendLoading(true);
+    setError("");
+    setMessage("");
+
+    const response = await fetch("/api/register/resend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+    const payload = await response.json();
+    setResendLoading(false);
+
+    if (!response.ok) {
+      setError(payload.error ?? "Could not resend verification email.");
+      return;
+    }
+
+    setMessage(payload.message ?? "Verification email sent.");
   };
 
   return (
@@ -72,6 +99,15 @@ export function RegisterForm() {
         className="w-full rounded-md bg-[#81b64c] px-3 py-2 font-bold text-[#183014] disabled:opacity-70"
       >
         {loading ? "Creating account..." : "Create account"}
+      </button>
+
+      <button
+        type="button"
+        onClick={resendVerification}
+        disabled={resendLoading}
+        className="w-full rounded-md border border-slate-400 px-3 py-2 text-sm disabled:opacity-70"
+      >
+        {resendLoading ? "Resending..." : "Resend verification email"}
       </button>
     </form>
   );
