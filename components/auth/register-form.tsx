@@ -101,14 +101,17 @@ export function RegisterForm() {
         {loading ? "Creating account..." : "Create account"}
       </button>
 
-      <button
-        type="button"
-        onClick={resendVerification}
-        disabled={resendLoading}
-        className="w-full rounded-md border border-slate-400 px-3 py-2 text-sm disabled:opacity-70"
-      >
-        {resendLoading ? "Resending..." : "Resend verification email"}
-      </button>
+      <div className="text-center text-sm">
+        <span className="text-slate-400">Didn&apos;t get the verification email? </span>
+        <button
+          type="button"
+          onClick={resendVerification}
+          disabled={resendLoading}
+          className="font-semibold text-emerald-300 underline underline-offset-2 hover:text-emerald-200 disabled:opacity-70"
+        >
+          {resendLoading ? "Resending..." : "Resend email"}
+        </button>
+      </div>
     </form>
   );
 }
