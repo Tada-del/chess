@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum GameMode {
+  BOT
+  FRIEND
+  LIVE
+}
+
+enum GameResult {
+  WHITE_WIN
+  BLACK_WIN
+  DRAW
+  ABORTED
+}
+
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String    @unique
+  emailVerified  DateTime?
+  image          String?
+  passwordHash   String?
+  role           Role      @default(USER)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  accounts       Account[]
+  sessions       Session[]
+
+  sentFriendRequests     FriendRequest[] @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+
+  friendships Friendship[] @relation("FriendshipUser")
+  friendOf    Friendship[] @relation("FriendshipFriend")
+
+  whiteGames         Game[]      @relation("WhitePlayer")
+  blackGames         Game[]      @relation("BlackPlayer")
+  sentChallenges     Challenge[] @relation("ChallengeSender")
+  receivedChallenges Challenge[] @relation("ChallengeReceiver")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model FriendRequest {
+  id         String              @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  sender   User @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+}
+
+model Friendship {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  createdAt DateTime @default(now())
+
+  user   User @relation("FriendshipUser", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("FriendshipFriend", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+}
+
+model Challenge {
+  id          String   @id @default(cuid())
+  roomCode    String   @unique
+  senderId    String
+  receiverId  String
+  timeControl String
+  accepted    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  sender   User @relation("ChallengeSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ChallengeReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+}
+
+model Game {
+  id          String      @id @default(cuid())
+  mode        GameMode
+  timeControl String
+  whiteId     String?
+  blackId     String?
+  whiteName   String
+  blackName   String
+  pgn         String
+  result      GameResult
+  openingEco  String?
+  openingName String?
+  moves       Json?
+  review      Json?
+  createdAt   DateTime    @default(now())
+  finishedAt  DateTime?
+
+  white User? @relation("WhitePlayer", fields: [whiteId], references: [id], onDelete: SetNull)
+  black User? @relation("BlackPlayer", fields: [blackId], references: [id], onDelete: SetNull)
+}
