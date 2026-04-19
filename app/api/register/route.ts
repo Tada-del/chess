@@ -82,14 +82,12 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       if (error instanceof EmailDeliveryConfigurationError) {
-        return NextResponse.json(
-          {
-            error:
-              "Verification email service is not configured yet. Use the manual verification link below or ask the admin to configure SMTP.",
-            verificationUrl,
-          },
-          { status: 503 },
-        );
+        return NextResponse.json({
+          success: true,
+          message:
+            "Email service is not configured on this deployment. Use the manual verification link below.",
+          manualVerifyUrl: verificationUrl,
+        });
       }
 
       throw error;
