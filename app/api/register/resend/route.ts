@@ -89,14 +89,12 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       if (error instanceof EmailDeliveryConfigurationError) {
-        return NextResponse.json(
-          {
-            error:
-              "Email delivery is not configured on this deployment. Use the manual verification link below.",
-            manualVerificationUrl: verificationUrl,
-          },
-          { status: 200 },
-        );
+        return NextResponse.json({
+          success: true,
+          message:
+            "Email service is not configured on this deployment. Use the manual verification link below.",
+          manualVerifyUrl: verificationUrl,
+        });
       }
       throw error;
     }
