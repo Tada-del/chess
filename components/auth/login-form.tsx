@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { signIn } from "next-auth/react";
 
-export function LoginForm() {
+export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -63,13 +63,20 @@ export function LoginForm() {
         {loading ? "Signing in..." : "Sign in"}
       </button>
 
-      <button
-        type="button"
-        onClick={() => signIn("google", { callbackUrl: "/" })}
-        className="w-full rounded-md border border-slate-400 px-3 py-2 text-sm"
-      >
-        Continue with Google
-      </button>
+      {googleEnabled ? (
+        <button
+          type="button"
+          onClick={() => signIn("google", { callbackUrl: "/" })}
+          className="w-full rounded-md border border-slate-400 px-3 py-2 text-sm"
+        >
+          Continue with Google
+        </button>
+      ) : (
+        <p className="text-xs text-slate-400">
+          Google sign-in is currently unavailable. Configure GOOGLE_CLIENT_ID and
+          GOOGLE_CLIENT_SECRET to enable it.
+        </p>
+      )}
     </form>
   );
 }
