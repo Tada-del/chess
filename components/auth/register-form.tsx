@@ -8,6 +8,7 @@ export function RegisterForm() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [manualVerifyUrl, setManualVerifyUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
 
@@ -16,6 +17,7 @@ export function RegisterForm() {
     setLoading(true);
     setError("");
     setMessage("");
+    setManualVerifyUrl("");
 
     const response = await fetch("/api/register", {
       method: "POST",
@@ -28,10 +30,16 @@ export function RegisterForm() {
 
     if (!response.ok) {
       setError(payload.error ?? "Could not create account.");
+      if (payload.manualVerifyUrl) {
+        setManualVerifyUrl(payload.manualVerifyUrl);
+      }
       return;
     }
 
     setMessage(payload.message ?? "Account created. Check your email for verification link.");
+    if (payload.manualVerifyUrl) {
+      setManualVerifyUrl(payload.manualVerifyUrl);
+    }
     setName("");
     setPassword("");
   };
@@ -45,6 +53,7 @@ export function RegisterForm() {
     setResendLoading(true);
     setError("");
     setMessage("");
+    setManualVerifyUrl("");
 
     const response = await fetch("/api/register/resend", {
       method: "POST",
@@ -57,10 +66,16 @@ export function RegisterForm() {
 
     if (!response.ok) {
       setError(payload.error ?? "Could not resend verification email.");
+      if (payload.manualVerifyUrl) {
+        setManualVerifyUrl(payload.manualVerifyUrl);
+      }
       return;
     }
 
     setMessage(payload.message ?? "Verification email sent.");
+    if (payload.manualVerifyUrl) {
+      setManualVerifyUrl(payload.manualVerifyUrl);
+    }
   };
 
   return (
@@ -93,6 +108,18 @@ export function RegisterForm() {
 
       {error ? <p className="text-sm text-rose-300">{error}</p> : null}
       {message ? <p className="text-sm text-emerald-300">{message}</p> : null}
+      {manualVerifyUrl ? (
+        <p className="text-xs text-amber-200">
+          Verification email could not be delivered from this environment. Use this
+          temporary link:{" "}
+          <a
+            href={manualVerifyUrl}
+            className="font-semibold text-amber-300 underline underline-offset-2"
+          >
+            Verify account
+          </a>
+        </p>
+      ) : null}
 
       <button
         disabled={loading}

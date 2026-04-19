@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendVerificationEmail } from "@/lib/email";
+import { EmailDeliveryConfigurationError, sendVerificationEmail } from "@/lib/email";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const registerSchema = z.object({
@@ -74,11 +74,26 @@ export async function POST(request: Request) {
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
     const verificationUrl = `${baseUrl}/api/verify-email?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
 
-    await sendVerificationEmail({
-      to: normalizedEmail,
-      name,
-      verificationUrl,
-    });
+    try {
+      await sendVerificationEmail({
+        to: normalizedEmail,
+        name,
+        verificationUrl,
+      });
+    } catch (error) {
+      if (error instanceof EmailDeliveryConfigurationError) {
+        return NextResponse.json(
+          {
+            error:
+              "Verification email service is not configured yet. Use the manual verification link below or ask the admin to configure SMTP.",
+            verificationUrl,
+          },
+          { status: 503 },
+        );
+      }
+
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,

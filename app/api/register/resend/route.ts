@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendVerificationEmail } from "@/lib/email";
+import { EmailDeliveryConfigurationError, sendVerificationEmail } from "@/lib/email";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const schema = z.object({
@@ -76,16 +76,30 @@ export async function POST(request: Request) {
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
     const verificationUrl = `${baseUrl}/api/verify-email?token=${token}&email=${encodeURIComponent(email)}`;
 
-    await sendVerificationEmail({
-      to: email,
-      name: pending.name,
-      verificationUrl,
-    });
+    try {
+      await sendVerificationEmail({
+        to: email,
+        name: pending.name,
+        verificationUrl,
+      });
 
-    return NextResponse.json({
-      success: true,
-      message: "Verification email sent. Check your inbox and spam folder.",
-    });
+      return NextResponse.json({
+        success: true,
+        message: "Verification email sent. Check your inbox and spam folder.",
+      });
+    } catch (error) {
+      if (error instanceof EmailDeliveryConfigurationError) {
+        return NextResponse.json(
+          {
+            error:
+              "Email delivery is not configured on this deployment. Use the manual verification link below.",
+            manualVerificationUrl: verificationUrl,
+          },
+          { status: 200 },
+        );
+      }
+      throw error;
+    }
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Unable to resend verification email right now." }, { status: 500 });
